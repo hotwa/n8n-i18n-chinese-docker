@@ -86,8 +86,9 @@ jobs:
     - name: 构建镜像
       run: |
         N8N_VERSION=${{ steps.normalize_version.outputs.n8n_version }}
-        IMAGE_NAME=hotwa/n8n-chinese:$N8N_VERSION
-        docker build -t $IMAGE_NAME .
+        VERSION_IMAGE=hotwa/n8n-chinese:$N8N_VERSION
+        LATEST_IMAGE=hotwa/n8n-chinese:latest
+        docker build -t $VERSION_IMAGE -t $LATEST_IMAGE .
 
     - name: 登录 DockerHub
       uses: docker/login-action@v3
@@ -98,5 +99,7 @@ jobs:
     - name: 推送镜像
       run: |
         N8N_VERSION=${{ steps.normalize_version.outputs.n8n_version }}
-        IMAGE_NAME=hotwa/n8n-chinese:$N8N_VERSION
-        docker push $IMAGE_NAME
+        VERSION_IMAGE=hotwa/n8n-chinese:$N8N_VERSION
+        LATEST_IMAGE=hotwa/n8n-chinese:latest
+        docker push $VERSION_IMAGE
+        docker push $LATEST_IMAGE
