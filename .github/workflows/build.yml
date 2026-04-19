@@ -14,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: 检出仓库
+      uses: actions/checkout@v4
+
     - name: 获取上游最新 Release
       id: get_release
       run: |
@@ -23,11 +26,34 @@ jobs:
         echo "tag=$tag" >> $GITHUB_OUTPUT
         echo "asset_url=$asset_url" >> $GITHUB_OUTPUT
 
+    - name: 规范化版本号
+      id: normalize_version
+      run: |
+        release_tag=${{ steps.get_release.outputs.tag }}
+        case "$release_tag" in
+          release/*)
+            n8n_version="${release_tag#release/}"
+            ;;
+          n8n@*)
+            n8n_version="${release_tag#n8n@}"
+            ;;
+          *)
+            n8n_version="$release_tag"
+            ;;
+        esac
+
+        if [ -z "$n8n_version" ] || [[ ! "$n8n_version" =~ ^[0-9]+(\.[0-9]+)*([.-][0-9A-Za-z.-]+)?$ ]]; then
+          echo "无法从上游 tag 推导 n8n 版本: $release_tag"
+          exit 1
+        fi
+
+        echo "n8n_version=$n8n_version" >> $GITHUB_OUTPUT
+
     - name: 检查是否已发布过
       id: check_tag
       run: |
         tag=${{ steps.get_release.outputs.tag }}
-        if git ls-remote --tags origin | grep "refs/tags/$tag$"; then
+        if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
           echo "Tag $tag 已存在，跳过"
           echo "exists=true" >> $GITHUB_OUTPUT
         else
@@ -51,8 +77,7 @@ jobs:
 
     - name: 生成 Dockerfile
       run: |
-        TAG=${{ steps.get_release.outputs.tag }}
-        N8N_VERSION="${TAG#n8n@}"  # 去掉前缀
+        N8N_VERSION=${{ steps.normalize_version.outputs.n8n_version }}
         cat <<EOF > Dockerfile
         FROM n8nio/n8n:$N8N_VERSION
         COPY src-dist/dist /usr/local/lib/node_modules/n8n/node_modules/n8n-editor-ui/dist
@@ -60,8 +85,7 @@ jobs:
 
     - name: 构建镜像
       run: |
-        TAG=${{ steps.get_release.outputs.tag }}
-        N8N_VERSION="${TAG#n8n@}"
+        N8N_VERSION=${{ steps.normalize_version.outputs.n8n_version }}
         IMAGE_NAME=hotwa/n8n-chinese:$N8N_VERSION
         docker build -t $IMAGE_NAME .
 
@@ -73,7 +97,6 @@ jobs:
 
     - name: 推送镜像
       run: |
-        TAG=${{ steps.get_release.outputs.tag }}
-        N8N_VERSION="${TAG#n8n@}"
+        N8N_VERSION=${{ steps.normalize_version.outputs.n8n_version }}
         IMAGE_NAME=hotwa/n8n-chinese:$N8N_VERSION
         docker push $IMAGE_NAME
